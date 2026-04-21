@@ -6,6 +6,7 @@ import numpy as np
 import rasterio
 import random
 import os
+from pathlib import Path
 
 def get_images_path(path, satellite):
     '''
@@ -94,7 +95,8 @@ def get_s1_image(image_path, normalization):
         vv = src.read()
         vv = np.moveaxis(vv,0,-1)
 
-    #vv = 10 * np.log10(vv)
+    if np.nanmax(vv) > 1.0:
+        vv = 10.0 * np.log10(np.clip(vv, 1e-6, None))
     vv = np.clip(vv, -25, 10)
     #vv = reject_outliers(vv)
     #Normalization in [-1, 1]
@@ -102,6 +104,83 @@ def get_s1_image(image_path, normalization):
     vv = np.clip(vv, 0.0, 1.0)
     
     return vv
+
+
+def _safe_minmax(arr):
+    min_val = np.nanmin(arr)
+    max_val = np.nanmax(arr)
+    if max_val - min_val < 1e-8:
+        return np.zeros_like(arr, dtype=np.float32)
+    return (arr - min_val) / (max_val - min_val)
+
+
+def _build_name_to_path(folder):
+    folder = Path(folder)
+    if not folder.exists():
+        return {}
+    mapping = {}
+    for tif in sorted(folder.glob("*.tif")):
+        mapping[tif.stem] = str(tif)
+    return mapping
+
+
+def collect_zone_triplets(dataset_path):
+    """
+    Collect triplets from zone-based folders:
+    dataset_path/zone_x/{cloudy,clear,sar}/<same_name>.tif
+    """
+    root = Path(dataset_path)
+    if not root.exists():
+        raise FileNotFoundError(f"Dataset path not found: {dataset_path}")
+
+    triplets = []
+    zones = [z for z in sorted(root.iterdir()) if z.is_dir()]
+    for zone in zones:
+        cloudy_map = _build_name_to_path(zone / "cloudy")
+        clear_map = _build_name_to_path(zone / "clear")
+        sar_map = _build_name_to_path(zone / "sar")
+
+        shared_names = sorted(set(cloudy_map) & set(clear_map) & set(sar_map))
+        for name in shared_names:
+            triplets.append(
+                {
+                    "zone": zone.name,
+                    "name": name,
+                    "cloudy": cloudy_map[name],
+                    "clear": clear_map[name],
+                    "sar": sar_map[name],
+                }
+            )
+    return triplets
+
+
+def build_zone_sequences(triplets, sequence_size=3):
+    """
+    Convert per-timestamp triplets to sequence samples.
+    Each sample uses sequence_size cloudy frames as input and the clear/sar
+    frame at the last timestamp as target/conditioning.
+    """
+    by_zone = {}
+    for t in triplets:
+        by_zone.setdefault(t["zone"], []).append(t)
+
+    samples = []
+    for zone, items in by_zone.items():
+        items = sorted(items, key=lambda x: x["name"])
+        if len(items) < sequence_size:
+            continue
+        for idx in range(sequence_size - 1, len(items)):
+            window = items[idx - sequence_size + 1 : idx + 1]
+            samples.append(
+                {
+                    "zone": zone,
+                    "name": items[idx]["name"],
+                    "inputs": [w["cloudy"] for w in window],
+                    "target": items[idx]["clear"],
+                    "sar": items[idx]["sar"],
+                }
+            )
+    return samples
 
 def date_sort(e):
     '''
@@ -207,21 +286,35 @@ def image_generatorLSTM(s2_paths, batch_size = 16, normalization='minmax', augme
 
     while True:
       for i in range(0, int(batch_size)):
-        batch_index = randint(0, high=int(len(s2_paths)/4))*4
-
         if augment:
             transform = aug.get_random_transform(img_shape = (256,256,3))
 
-        for j in range(4):
-            s2 = get_s2_image(s2_paths[batch_index+j], normalization)
+        if len(s2_paths) == 0:
+            continue
 
+        if isinstance(s2_paths[0], dict):
+            sample = random.choice(s2_paths)
+            for j in range(3):
+                s2 = get_s2_image(sample["inputs"][j], normalization)
+                if augment:
+                    s2 = aug.apply_transform(s2, transform)
+                batch_s2_input[i, j, :s2.shape[0], :s2.shape[1], ...] = s2
+            target = get_s2_image(sample["target"], normalization)
             if augment:
-              s2 = aug.apply_transform(s2, transform)
-          
-            if j == 3:
-                batch_output[i,:s2.shape[0],:s2.shape[1],...] = s2
-            else:
-                batch_s2_input[i,j,:s2.shape[0],:s2.shape[1],...] = s2
+                target = aug.apply_transform(target, transform)
+            batch_output[i, :target.shape[0], :target.shape[1], ...] = target
+        else:
+            batch_index = randint(0, high=int(len(s2_paths)/4))*4
+            for j in range(4):
+                s2 = get_s2_image(s2_paths[batch_index+j], normalization)
+
+                if augment:
+                    s2 = aug.apply_transform(s2, transform)
+            
+                if j == 3:
+                    batch_output[i,:s2.shape[0],:s2.shape[1],...] = s2
+                else:
+                    batch_s2_input[i,j,:s2.shape[0],:s2.shape[1],...] = s2
 
       yield batch_s2_input, batch_output
 
@@ -246,14 +339,19 @@ def image_generatorCycleGAN(s2_paths, s1_paths, batch_size = 16, normalization='
 
     while True:
         for i in range(0, int(batch_size)):
-
-            batch_index = randint(0, high=int(len(s2_paths)/4))*4
             if augment:
                 transform = aug.get_random_transform(img_shape = (256,256,1))
 
-            s2 = get_s2_image(s2_paths[batch_index+3], normalization)
-            #s1 = rgb2gray(s2)
-            s1 = get_s1_image(s1_paths[batch_index+2], normalization)
+            if len(s2_paths) == 0:
+                continue
+            if isinstance(s2_paths[0], dict):
+                sample = random.choice(s2_paths)
+                s2 = get_s2_image(sample["target"], normalization)
+                s1 = get_s1_image(sample["sar"], normalization)
+            else:
+                batch_index = randint(0, high=int(len(s2_paths)/4))*4
+                s2 = get_s2_image(s2_paths[batch_index+3], normalization)
+                s1 = get_s1_image(s1_paths[batch_index+2], normalization)
 
             if augment:
                 s2 = aug.apply_transform(s2, transform)
@@ -273,30 +371,51 @@ def image_generatorCycleGAN(s2_paths, s1_paths, batch_size = 16, normalization='
         yield batch_s2, batch_s1
 
 def image_generatorHEAD(series, lstm, gan, batch_size = 16, normalization='minmax', augment = True):
-    s2_paths = series[0]
-    s1_paths = series[1]
+    if isinstance(series, list) and len(series) > 0 and isinstance(series[0], dict):
+        s2_paths = series
+        s1_paths = None
+        zone_mode = True
+    else:
+        s2_paths = series[0]
+        s1_paths = series[1]
+        zone_mode = False
     batch_input  = np.zeros((batch_size,256,256, 6))
     batch_output  = np.zeros((batch_size,256,256, 3))
 
     while True:
         for i in range(0, int(batch_size)):
-            batch_index = randint(0, high=int(len(s2_paths)/4))*4
-
             batch_s2  = np.zeros((1, 3,256,256,3))
             batch_s1  = np.zeros((1, 256,256,3))
+            if len(s2_paths) == 0:
+                continue
+            if zone_mode:
+                sample = random.choice(s2_paths)
+                for j in range(3):
+                    s2 = get_s2_image(sample["inputs"][j], normalization)
+                    batch_s2[0, j, :s2.shape[0], :s2.shape[1], ...] = s2
 
-            for j in range(4):
-                s2 = get_s2_image(s2_paths[batch_index+j], normalization)
-                
-                if j==3:
-                    batch_output[i,:s2.shape[0],:s2.shape[1],...] = s2
-                    s1 = get_s1_image(s1_paths[batch_index+j], normalization)
-                    s1 = (2*s1) - 1.0
-                    batch_s1[0, :s1.shape[0], :s1.shape[1], 0] = s1[...,0]
-                    batch_s1[0, :s1.shape[0], :s1.shape[1], 1] = s1[...,0]
-                    batch_s1[0, :s1.shape[0], :s1.shape[1], 1] = s1[...,0]
-                else:
-                    batch_s2[0, j, :s2.shape[0], :s2.shape[1],...] = s2
+                target = get_s2_image(sample["target"], normalization)
+                batch_output[i, :target.shape[0], :target.shape[1], ...] = target
+
+                s1 = get_s1_image(sample["sar"], normalization)
+                s1 = (2*s1) - 1.0
+                batch_s1[0, :s1.shape[0], :s1.shape[1], 0] = s1[...,0]
+                batch_s1[0, :s1.shape[0], :s1.shape[1], 1] = s1[...,0]
+                batch_s1[0, :s1.shape[0], :s1.shape[1], 2] = s1[...,0]
+            else:
+                batch_index = randint(0, high=int(len(s2_paths)/4))*4
+                for j in range(4):
+                    s2 = get_s2_image(s2_paths[batch_index+j], normalization)
+                    
+                    if j==3:
+                        batch_output[i,:s2.shape[0],:s2.shape[1],...] = s2
+                        s1 = get_s1_image(s1_paths[batch_index+j], normalization)
+                        s1 = (2*s1) - 1.0
+                        batch_s1[0, :s1.shape[0], :s1.shape[1], 0] = s1[...,0]
+                        batch_s1[0, :s1.shape[0], :s1.shape[1], 1] = s1[...,0]
+                        batch_s1[0, :s1.shape[0], :s1.shape[1], 2] = s1[...,0]
+                    else:
+                        batch_s2[0, j, :s2.shape[0], :s2.shape[1],...] = s2
 
             lstm_o = lstm.predict(batch_s2)
             gan_o  = gan.predict(batch_s1)
