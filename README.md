@@ -41,13 +41,19 @@ If `pip install -r requirements.txt` still fails with a `rasterio`/`GDAL` error,
 conda create -n plfm python=3.9 -y
 conda activate plfm
 conda install -c conda-forge rasterio gdal -y
-pip install -r requirements.txt --no-deps
+pip install -r requirements.txt
 ```
 
 Quick verification:
 
 ```
 python -c "import rasterio, tensorflow as tf; print('rasterio', rasterio.__version__); print('tf', tf.__version__)"
+```
+
+If TensorFlow Addons is missing at runtime, install:
+
+```
+pip install tensorflow-addons==0.18.0
 ```
 
 ### Compatibility updates in this fork
