@@ -87,15 +87,6 @@ Where:
 Example:
 - `zoneA_img_0012_0007.tif`
 
-#### 3) Naming after prediction
-
-At the moment, prediction export naming is **not yet defined in code**:
-- `main.py --test` calls `PLFM.test(...)`,
-- but `PLFM.test()` is currently empty (`pass`),
-- so no prediction files are written yet.
-
-When test-time export is implemented, prediction filename conventions should be added here to keep train/test datasets consistent.
-
 To change default parameters please look at [models configuration file](models/models_config.py).
 
 
