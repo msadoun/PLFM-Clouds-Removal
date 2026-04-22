@@ -6,6 +6,9 @@
 **PLEASE BE AWARE THAT THIS REPO IS CURRENTLY UNDER MAINTENANCE, WE ARE UPGRADING THE CODE**
 **A NEWER IMPLEMENTATION WILL APPEAR SOON**
 
+## Fork note
+
+This repository is a fork/adaptation of the original PLFM implementation and keeps the same core objective: combining optical time-series and SAR data for cloud removal.
 
 The proposed PLFM model combines a time-series of optical images and a SAR image to remove clouds from optical images.
 
@@ -15,24 +18,42 @@ The proposed PLFM model combines a time-series of optical images and a SAR image
 ![](res/cloudy.png) | ![](res/prediction.png) | ![](res/gt.png)
 
 
-## Usage
-To train the PLFM you can simply run
+## Installation
+
+Install dependencies from `requirements.txt`:
 
 ```
-python main.py --train dataset_path
+pip install -r requirements.txt
 ```
 
-where dataset_path should contain 2 subfolders named "training" and "validation".
+### Windows/Conda install note (rasterio/GDAL)
 
-### Zone-based dataset workflow
-You can now preprocess raw aligned GeoTIFF triplets (`raw_data/clear`, `raw_data/cloudy`, `raw_data/sar`) into
-the zone format expected by the new loader:
+If `pip install -r requirements.txt` fails on Windows with a `rasterio`/`GDAL` build error, install the geo stack from `conda-forge` first, then install the remaining Python packages:
+
+```
+conda create -n plfm python=3.9 -y
+conda activate plfm
+conda install -c conda-forge rasterio=1.2.10 gdal=3.3.3 -y
+pip install -r requirements.txt --no-deps
+```
+
+Quick verification:
+
+```
+python -c "import rasterio, tensorflow as tf; print('rasterio', rasterio.__version__); print('tf', tf.__version__)"
+```
+
+## Data workflow
+
+### Zone-based dataset preprocessing
+
+Preprocess raw aligned GeoTIFF triplets from `raw_data/clear`, `raw_data/cloudy`, and `raw_data/sar` into the zone format expected by the loader:
 
 ```
 python preprocess.py --raw_data raw_data_path --output dataset_path --tile_size 256
 ```
 
-This creates:
+This creates a dataset like:
 
 ```
 dataset_path/
@@ -45,15 +66,9 @@ dataset_path/
   zone_D/
 ```
 
-Each sample is matched by filename across `cloudy/`, `clear/`, and `sar/` within each zone.
-During training with `python main.py --train dataset_path`, the loader:
-- collects shared base filenames in each zone,
-- builds cloudy input sequences,
-- uses aligned `clear` (target) and `sar` (conditioning) frames from the same base name.
+### Naming conventions
 
-### Naming convention
-
-#### 1) Raw input naming (`raw_data/clear`, `raw_data/cloudy`, `raw_data/sar`)
+#### Raw input naming (`raw_data/clear`, `raw_data/cloudy`, `raw_data/sar`)
 
 The preprocessor matches files by extracting the **last numeric token** from each filename.
 All three modalities must share the same final numeric ID.
@@ -68,7 +83,7 @@ Accepted pattern rule:
 - but each file must contain digits,
 - and the **last** digit group must be the same across `clear`, `cloudy`, and `sar`.
 
-#### 2) Preprocessed tile naming (output dataset)
+#### Preprocessed tile naming (output dataset)
 
 For each extracted tile, the script writes the same filename into:
 - `dataset_path/zone_A/clear/`
@@ -109,33 +124,30 @@ So, before running preprocessing:
 
 Keep raw data simple: one full-scene GeoTIFF per timestamp in each of `clear/`, `cloudy/`, and `sar/`, with matching numeric IDs.
 
-### Windows/Conda install note (rasterio/GDAL)
+During training with `python main.py --train dataset_path`, the loader:
+- collects shared base filenames in each zone,
+- builds cloudy input sequences,
+- uses aligned `clear` (target) and `sar` (conditioning) frames from the same base name.
 
-If `pip install -r requirements.txt` fails on Windows with a `rasterio`/`GDAL` build error, install the geo stack from `conda-forge` first, then install the remaining Python packages:
+## Usage
 
-```
-conda create -n plfm python=3.9 -y
-conda activate plfm
-conda install -c conda-forge rasterio=1.2.10 gdal=3.3.3 -y
-pip install -r requirements.txt --no-deps
-```
+### Train
 
-Quick verification:
+To train PLFM:
 
 ```
-python -c "import rasterio, tensorflow as tf; print('rasterio', rasterio.__version__); print('tf', tf.__version__)"
+python main.py --train dataset_path
 ```
 
-To change default parameters please look at [models configuration file](models/models_config.py).
+### Predict/Test
 
-
-To test the PLFM you can simply run
+To run test mode:
 
 ```
 python main.py --test dataset_path
 ```
 
-where dataset_path is the path to the test dataset.
+To change default parameters please look at [models configuration file](models/models_config.py).
 
 
 ## Dataset
