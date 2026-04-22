@@ -51,6 +51,51 @@ During training with `python main.py --train dataset_path`, the loader:
 - builds cloudy input sequences,
 - uses aligned `clear` (target) and `sar` (conditioning) frames from the same base name.
 
+### Naming convention
+
+#### 1) Raw input naming (`raw_data/clear`, `raw_data/cloudy`, `raw_data/sar`)
+
+The preprocessor matches files by extracting the **last numeric token** from each filename.
+All three modalities must share the same final numeric ID.
+
+Examples that match as one triplet:
+- `clear_scene_0012.tif`
+- `cloudy_scene_0012.tif`
+- `sar_scene_0012.tif`
+
+Accepted pattern rule:
+- filenames can differ in prefix/text,
+- but each file must contain digits,
+- and the **last** digit group must be the same across `clear`, `cloudy`, and `sar`.
+
+#### 2) Preprocessed tile naming (output dataset)
+
+For each extracted tile, the script writes the same filename into:
+- `dataset_path/zone_A/clear/`
+- `dataset_path/zone_A/cloudy/`
+- `dataset_path/zone_A/sar/`
+(and similarly for `zone_B`, `zone_C`, `zone_D` when `--zone_split quadrants` is used).
+
+Output filename format:
+`zoneX_img_<sample_id>_<tile_idx>.tif`
+
+Where:
+- `zoneX` is `zoneA`, `zoneB`, `zoneC`, or `zoneD` (without underscore in filename),
+- `<sample_id>` is the matched numeric ID from raw filenames,
+- `<tile_idx>` is a zero-padded per-zone counter (e.g. `0001`, `0002`, ...).
+
+Example:
+- `zoneA_img_0012_0007.tif`
+
+#### 3) Naming after prediction
+
+At the moment, prediction export naming is **not yet defined in code**:
+- `main.py --test` calls `PLFM.test(...)`,
+- but `PLFM.test()` is currently empty (`pass`),
+- so no prediction files are written yet.
+
+When test-time export is implemented, prediction filename conventions should be added here to keep train/test datasets consistent.
+
 To change default parameters please look at [models configuration file](models/models_config.py).
 
 
