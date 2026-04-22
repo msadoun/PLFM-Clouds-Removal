@@ -1,0 +1,24 @@
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+.idea/
+.ipynb_checkpoints/
+
+# Generated artifacts
+raw_data/
+dataset/
+predictions/
+ganlog/
+logs/
+weights/
+weights2/
+test_image/
+
+# Local environment folders
+.venv/
+venv/
+env/

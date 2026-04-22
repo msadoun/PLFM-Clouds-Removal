@@ -69,6 +69,44 @@ Library updates:
 - pinned TensorFlow stack to a known-working pair: `tensorflow==2.10.1` and `tensorflow-addons==0.18.0`,
 - added missing runtime dependencies used by `utils/metrics.py`: `scikit-image` and `sewar`.
 
+### Docker (CPU)
+
+You can run the project in Docker to avoid local environment conflicts.
+
+Build image:
+
+```
+docker build -t plfm .
+```
+
+Run preprocessing:
+
+```
+docker run --rm -v ${PWD}:/workspace plfm preprocess.py --raw_data raw_data --output dataset --tile_size 256
+```
+
+Validate dataset:
+
+```
+docker run --rm -v ${PWD}:/workspace plfm validate_dataset.py --dataset dataset --sequence_size 3
+```
+
+Train:
+
+```
+docker run --rm -v ${PWD}:/workspace plfm main.py --train dataset
+```
+
+Test / export predictions:
+
+```
+docker run --rm -v ${PWD}:/workspace plfm main.py --test dataset predictions
+```
+
+Notes:
+- the image is CPU-oriented,
+- `-v ${PWD}:/workspace` keeps generated data/checkpoints on your host machine.
+
 ## Data workflow
 
 ### Zone-based dataset preprocessing
