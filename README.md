@@ -155,6 +155,20 @@ During training with `python main.py --train dataset_path`, the loader:
 - builds cloudy input sequences,
 - uses aligned `clear` (target) and `sar` (conditioning) frames from the same base name.
 
+### Validate dataset before training
+
+Run a quick structural validation before training:
+
+```
+python validate_dataset.py --dataset dataset_path --sequence_size 3
+```
+
+This checks:
+- `zone_*` folder presence,
+- filename alignment across `cloudy/`, `clear/`, and `sar/`,
+- sampled width/height consistency across modalities,
+- number of trainable sequences available.
+
 ## Usage
 
 ### Train
@@ -167,10 +181,26 @@ python main.py --train dataset_path
 
 ### Predict/Test
 
-To run test mode:
+After training (or after placing pretrained checkpoints in `weights/`), run test mode to export predictions as GeoTIFFs:
 
 ```
 python main.py --test dataset_path
+```
+
+Optional custom output directory:
+
+```
+python main.py --test dataset_path predictions_out
+```
+
+Predictions are saved under:
+
+```
+predictions_out/
+  zone_A/
+    pred_<sample_name>.tif
+  zone_B/
+  ...
 ```
 
 To change default parameters please look at [models configuration file](models/models_config.py).

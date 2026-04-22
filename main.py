@@ -12,9 +12,13 @@ logging.getLogger('tensorflow').setLevel(logging.FATAL)
 
 
 def main(argv):
+    if len(argv) == 0:
+        print('[!] Usage: python main.py --train <dataset_path> | --test <dataset_path> [output_dir]')
+        return
+
     # Initialize PLFM
     print('[-] Initializing PLFM \n')
-    plfm = PLFM('weigths')
+    plfm = PLFM('weights')
 
     # Training PLFM
     if argv[0] == '--train':
@@ -27,7 +31,10 @@ def main(argv):
     # Testing PLFM
     elif argv[0] == '--test':
         if len(argv)>1:
-            plfm.test(argv[1])
+            if len(argv) > 2:
+                plfm.test(argv[1], argv[2])
+            else:
+                plfm.test(argv[1])
         else:
             plfm.test('SeriesSen1-2')
     else:
