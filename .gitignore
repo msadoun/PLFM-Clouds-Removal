@@ -17,6 +17,8 @@ weights/lstm-2.h5
 test_image
 logs
 ganlog
+raw_data/
+dataset/
 .idea
 weights2
 test-data

@@ -28,12 +28,19 @@ pip install -r requirements.txt
 
 ### Windows/Conda install note (rasterio/GDAL)
 
-If `pip install -r requirements.txt` fails on Windows with a `rasterio`/`GDAL` build error, install the geo stack from `conda-forge` first, then install the remaining Python packages:
+This project now uses a modern `rasterio` range (`>=1.3.9,<2.0`) to avoid old GDAL build issues on Windows.
+In most cases, this is enough:
+
+```
+pip install -r requirements.txt
+```
+
+If `pip install -r requirements.txt` still fails with a `rasterio`/`GDAL` error, use this fallback:
 
 ```
 conda create -n plfm python=3.9 -y
 conda activate plfm
-conda install -c conda-forge rasterio=1.2.10 gdal=3.3.3 -y
+conda install -c conda-forge rasterio gdal -y
 pip install -r requirements.txt --no-deps
 ```
 
@@ -42,6 +49,19 @@ Quick verification:
 ```
 python -c "import rasterio, tensorflow as tf; print('rasterio', rasterio.__version__); print('tf', tf.__version__)"
 ```
+
+### Compatibility updates in this fork
+
+To make setup and training work reliably on current Windows/Conda environments, this fork includes the following updates.
+
+Code changes:
+- removed legacy `keras_contrib` imports from `models/cGAN.py` and `models/dualcGAN.py` (these imports were unused and blocked startup),
+- kept model logic unchanged while removing that hard dependency.
+
+Library updates:
+- upgraded `rasterio` requirement from `1.2.10` to `>=1.3.9,<2.0` to avoid old GDAL build/DLL issues,
+- pinned TensorFlow stack to a known-working pair: `tensorflow==2.10.1` and `tensorflow-addons==0.18.0`,
+- added missing runtime dependencies used by `utils/metrics.py`: `scikit-image` and `sewar`.
 
 ## Data workflow
 

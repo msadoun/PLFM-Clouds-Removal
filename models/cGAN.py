@@ -1,4 +1,3 @@
-from keras_contrib.layers.normalization.instancenormalization import InstanceNormalization
 from tensorflow.keras.layers import Input, Dropout, Concatenate
 from tensorflow.keras.layers import BatchNormalization, Activation
 from tensorflow.keras.layers import LeakyReLU
