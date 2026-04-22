@@ -7,6 +7,7 @@ import rasterio
 import random
 import os
 from pathlib import Path
+import re
 
 def get_images_path(path, satellite):
     '''
@@ -134,7 +135,11 @@ def collect_zone_triplets(dataset_path):
         raise FileNotFoundError(f"Dataset path not found: {dataset_path}")
 
     triplets = []
-    zones = [z for z in sorted(root.iterdir()) if z.is_dir()]
+    zones = [z for z in sorted(root.iterdir()) if z.is_dir() and z.name.startswith("zone_")]
+    if not zones:
+        raise RuntimeError(
+            f"No zone folders found in {dataset_path}. Expected folders named like zone_A/zone_B."
+        )
     for zone in zones:
         cloudy_map = _build_name_to_path(zone / "cloudy")
         clear_map = _build_name_to_path(zone / "clear")
@@ -154,6 +159,17 @@ def collect_zone_triplets(dataset_path):
     return triplets
 
 
+def _natural_key(name):
+    parts = re.split(r"(\d+)", name)
+    key = []
+    for part in parts:
+        if part.isdigit():
+            key.append(int(part))
+        else:
+            key.append(part)
+    return key
+
+
 def build_zone_sequences(triplets, sequence_size=3):
     """
     Convert per-timestamp triplets to sequence samples.
@@ -166,7 +182,7 @@ def build_zone_sequences(triplets, sequence_size=3):
 
     samples = []
     for zone, items in by_zone.items():
-        items = sorted(items, key=lambda x: x["name"])
+        items = sorted(items, key=lambda x: _natural_key(x["name"]))
         if len(items) < sequence_size:
             continue
         for idx in range(sequence_size - 1, len(items)):
@@ -275,6 +291,9 @@ def get_time_series(images):
     return series
 
 def image_generatorLSTM(s2_paths, batch_size = 16, normalization='minmax', augment = True):
+    if len(s2_paths) == 0:
+        raise ValueError("image_generatorLSTM received an empty dataset.")
+
     batch_s2_input  = np.zeros((batch_size,3,256,256, 3))
     batch_output  = np.zeros((batch_size,256,256, 3))
 
@@ -288,9 +307,6 @@ def image_generatorLSTM(s2_paths, batch_size = 16, normalization='minmax', augme
       for i in range(0, int(batch_size)):
         if augment:
             transform = aug.get_random_transform(img_shape = (256,256,3))
-
-        if len(s2_paths) == 0:
-            continue
 
         if isinstance(s2_paths[0], dict):
             sample = random.choice(s2_paths)
@@ -327,6 +343,8 @@ def rgb2gray(rgb):
     return gray[:,:,np.newaxis]
 
 def image_generatorCycleGAN(s2_paths, s1_paths, batch_size = 16, normalization='minmax', augment = True):
+    if len(s2_paths) == 0:
+        raise ValueError("image_generatorCycleGAN received an empty dataset.")
 
     batch_s2  = np.ones((batch_size, 256, 256, 3))
     batch_s1  = np.ones((batch_size, 256, 256, 3))
@@ -342,8 +360,6 @@ def image_generatorCycleGAN(s2_paths, s1_paths, batch_size = 16, normalization='
             if augment:
                 transform = aug.get_random_transform(img_shape = (256,256,1))
 
-            if len(s2_paths) == 0:
-                continue
             if isinstance(s2_paths[0], dict):
                 sample = random.choice(s2_paths)
                 s2 = get_s2_image(sample["target"], normalization)
@@ -379,6 +395,9 @@ def image_generatorHEAD(series, lstm, gan, batch_size = 16, normalization='minma
         s2_paths = series[0]
         s1_paths = series[1]
         zone_mode = False
+    if len(s2_paths) == 0:
+        raise ValueError("image_generatorHEAD received an empty dataset.")
+
     batch_input  = np.zeros((batch_size,256,256, 6))
     batch_output  = np.zeros((batch_size,256,256, 3))
 
@@ -386,8 +405,6 @@ def image_generatorHEAD(series, lstm, gan, batch_size = 16, normalization='minma
         for i in range(0, int(batch_size)):
             batch_s2  = np.zeros((1, 3,256,256,3))
             batch_s1  = np.zeros((1, 256,256,3))
-            if len(s2_paths) == 0:
-                continue
             if zone_mode:
                 sample = random.choice(s2_paths)
                 for j in range(3):
