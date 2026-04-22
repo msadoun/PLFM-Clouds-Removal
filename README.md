@@ -109,6 +109,23 @@ So, before running preprocessing:
 
 Keep raw data simple: one full-scene GeoTIFF per timestamp in each of `clear/`, `cloudy/`, and `sar/`, with matching numeric IDs.
 
+### Windows/Conda install note (rasterio/GDAL)
+
+If `pip install -r requirements.txt` fails on Windows with a `rasterio`/`GDAL` build error, install the geo stack from `conda-forge` first, then install the remaining Python packages:
+
+```
+conda create -n plfm python=3.9 -y
+conda activate plfm
+conda install -c conda-forge rasterio=1.2.10 gdal=3.3.3 -y
+pip install -r requirements.txt --no-deps
+```
+
+Quick verification:
+
+```
+python -c "import rasterio, tensorflow as tf; print('rasterio', rasterio.__version__); print('tf', tf.__version__)"
+```
+
 To change default parameters please look at [models configuration file](models/models_config.py).
 
 
