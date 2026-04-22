@@ -1,0 +1,28 @@
+name: Docker
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t plfm-ci .
+
+      - name: Container import smoke
+        run: |
+          docker run --rm plfm-ci -c "import rasterio, tensorflow as tf, tensorflow_addons as tfa; print(rasterio.__version__, tf.__version__, tfa.__version__)"
