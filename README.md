@@ -87,6 +87,28 @@ Where:
 Example:
 - `zoneA_img_0012_0007.tif`
 
+### What preprocessing does automatically
+
+`preprocess.py` is responsible for preparing raw GeoTIFF triplets for training.  
+To avoid mismatches and duplicated work, provide aligned raw inputs and let the script handle the transformations below.
+
+The preprocessing code automatically:
+- matches `clear`, `cloudy`, and `sar` images by the shared final numeric ID in filenames,
+- validates geometry consistency (same width/height and geotransform across each triplet),
+- reads optical data as RGB bands and SAR as single-channel input,
+- normalizes optical tiles (`minmax` by default, or `std` with `--optical_norm std`),
+- converts SAR to dB when needed, clips to `[-25, 10]`, then min-max normalizes,
+- splits scenes into fixed `tile_size` patches and assigns each patch to zones (`zone_A`...`zone_D` with quadrant split by default),
+- writes processed tiles as float32 GeoTIFFs with consistent naming in each zone folder.
+
+So, before running preprocessing:
+- do not manually normalize pixel values,
+- do not manually tile the scenes,
+- do not manually rename tiles to the final `zoneX_img_*` format,
+- do not pre-split into zone folders.
+
+Keep raw data simple: one full-scene GeoTIFF per timestamp in each of `clear/`, `cloudy/`, and `sar/`, with matching numeric IDs.
+
 To change default parameters please look at [models configuration file](models/models_config.py).
 
 
